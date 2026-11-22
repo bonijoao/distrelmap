@@ -1,0 +1,77 @@
+name: Testes, site e APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Testes
+        run: npm test
+      - name: Build do site
+        run: npm run build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy-pages:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  android:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npm run build
+      - name: Projeto Android (Capacitor)
+        run: |
+          npx cap add android
+          npx --yes @capacitor/assets generate --android \
+            --iconBackgroundColor '#3a5ccc' --splashBackgroundColor '#f6f7fb'
+          npx cap sync android
+      - name: Gerar APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+      - name: Publicar APK na release "apk"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk mapa-das-distribuicoes.apk
+          gh release view apk >/dev/null 2>&1 || gh release create apk --prerelease \
+            --title "APK Android (última versão)" \
+            --notes "APK gerado automaticamente a cada atualização da branch main. Baixe no celular e instale (é preciso permitir a instalação de fontes desconhecidas)."
+          gh release upload apk mapa-das-distribuicoes.apk --clobber

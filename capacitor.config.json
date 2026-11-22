@@ -1,0 +1,6 @@
+{
+  "appId": "io.github.bonijoao.distrelmap",
+  "appName": "Mapa das Distribuições",
+  "webDir": "dist",
+  "android": { "backgroundColor": "#f6f7fb" }
+}
